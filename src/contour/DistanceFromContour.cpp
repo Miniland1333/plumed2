@@ -153,8 +153,8 @@ void DistanceFromContour::calculate() {
   if( fa*fb>0 ) {
     unsigned maxtries = std::floor( ( getBox()(dir,dir) ) / bw[dir] );
     for(unsigned i=0; i<maxtries; ++i) {
-      double sign=(pos2[dir]>0)? -1 : +1; // If the nanoparticle is inside the membrane push it out
-      pos1[dir] += sign*bw[dir]; fa = getDifferenceFromContour( pos1, faked );
+      double sign=(pos1[dir]>0)? +1 : -1; // If the nanoparticle is inside the membrane push it out
+      pos2[dir] += sign*bw[dir]; fb = getDifferenceFromContour( pos2, faked );
       if( fa*fb<0 ) break;
       // if fa*fb is less than zero the new pos 1 is outside the contour
     }

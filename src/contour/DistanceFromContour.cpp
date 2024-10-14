@@ -158,6 +158,10 @@ void DistanceFromContour::calculate() {
       if( fa*fb<0 ) break;
       // if fa*fb is less than zero the new pos 1 is outside the contour
     }
+    if (fa*fb>0) { //If for loop fails to find a root
+      std::cerr << "Error: cannot find first root" << std::endl;
+      std::abort();
+    }
   }
   // Set direction for contour search
   dirv[dir] = pos2[dir] - pos1[dir];
@@ -171,6 +175,10 @@ void DistanceFromContour::calculate() {
       double sign=(dirv[dir]>0)? +1 : -1;
       pos2[dir] += sign*bw[dir]; fc = getDifferenceFromContour( pos2, faked );
       if( fc*fb<0 ) break;
+    }
+    if (fc*fb>0) { //If for loop fails to find a root
+      std::cerr << "Error: cannot find second root" << std::endl;
+      std::abort();
     }
     dirv2[dir] = ( pos1[dir] + dirv[dir] ) - pos2[dir];
   }

@@ -68,7 +68,7 @@ namespace contour {
 class DistanceFromContour : public DistanceFromContourBase {
 private:
   unsigned dir;
-  double pbc_param;
+  // double pbc_param;
   std::vector<double> pos1, pos2, dirv, dirv2;
   std::vector<unsigned> perp_dirs;
   std::vector<Vector> atom_deriv;
@@ -88,12 +88,6 @@ void DistanceFromContour::registerKeywords( Keywords& keys ) {
   keys.addOutputComponent("qdist","default","the differentiable (squared) distance between the two contours (see above)");
   keys.addOutputComponent("thickness","default","the distance between the two contours on the line from the reference atom");
   keys.add("compulsory","DIR","the direction perpendicular to the contour that you are looking for");
-  keys.add("compulsory","TOLERANCE","0.1","this parameter is used to manage periodic boundary conditions.  The problem "
-           "here is that we can be between contours even when we are not within the membrane "
-           "because of periodic boundary conditions.  When we are in the contour, however, we "
-           "should have it so that the sums of the absolute values of the distances to the two "
-           "contours is approximately the distance between the two contours.  There can be numerical errors in these calculations, however, so "
-           "we specify a small tolerance here");
 }
 
 DistanceFromContour::DistanceFromContour( const ActionOptions& ao ):
@@ -113,8 +107,8 @@ DistanceFromContour::DistanceFromContour( const ActionOptions& ao ):
   else if( ldir=="z" ) { dir=2; perp_dirs[0]=0; perp_dirs[1]=1; dirv[2]=1; dirv2[2]=-1; }
   else error(ldir + " is not a valid direction use x, y or z");
 
-  // Read in the tolerance for the pbc parameter
-  parse("TOLERANCE",pbc_param);
+  // // Read in the tolerance for the pbc parameter
+  // parse("TOLERANCE",pbc_param);
 
   std::vector<unsigned> shape;
   // Create the values

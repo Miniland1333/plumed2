@@ -69,7 +69,7 @@ class DistanceFromContour : public DistanceFromContourBase {
 private:
   unsigned dir;
   // double pbc_param;
-  std::vector<double> pos1, pos2, dirv, dirv2;
+  std::vector<double> pos1, pos2, pos3, pos4, dirv, dirv2;
   std::vector<unsigned> perp_dirs;
   std::vector<Vector> atom_deriv;
 public:
@@ -95,6 +95,8 @@ DistanceFromContour::DistanceFromContour( const ActionOptions& ao ):
   DistanceFromContourBase(ao),
   pos1(3,0.0),
   pos2(3,0.0),
+  pos3(3,0.0),
+  pos4(3,0.0),
   dirv(3,0.0),
   dirv2(3,0.0),
   perp_dirs(2),
@@ -123,9 +125,12 @@ void DistanceFromContour::calculate() {
   if( !getPbc().isOrthorombic() ) error("cell box must be orthorhombic");
 
   // The nanoparticle is at the origin of our coordinate system
-  pos1[0]=pos1[1]=pos1[2]=0.0; pos2[0]=pos2[1]=pos2[2]=0.0;
+  pos1[0]=pos1[1]=pos1[2]=0.0;
+  pos2[0]=pos2[1]=pos2[2]=0.0;
+  pos3[0]=pos3[1]=pos3[2]=0.0;
+  pos4[0]=pos4[1]=pos4[2]=0.0;
 
-  // Set bracket as center of mass of membrane in active region
+  // Set pos2 to the position of the closest atom in the membrane
   Vector myvec = pbcDistance( getPosition(getNumberOfAtoms()-1), getPosition(0) ); pos2[dir]=myvec[dir];
   nactive=1; active_list[0]=0; double d2, mindist = myvec.modulo2();
   for(unsigned j=1; j<getNumberOfAtoms()-1; ++j) {
@@ -137,63 +142,87 @@ void DistanceFromContour::calculate() {
       active_list[nactive]=j; nactive++;
     }
   }
-  // pos1 position of the nanoparticle, in the first time
-  // pos2 is the position of the closer atom in the membrane with respect the nanoparticle
-  // fa = distance between pos1 and the contour
-  // fb = distance between pos2 and the contour
+
+  // pos1 position of the nanoparticle, located at origin
+  // pos2 is the position of the closest atom in the membrane with respect the nanoparticle
+  // fa = density difference between pos1 and the contour
+  // fb = density difference between pos2 and the contour
   std::vector<double> faked(3);
   double fa = getDifferenceFromContour( pos1, faked );
   double fb = getDifferenceFromContour( pos2, faked );
-  if( fa*fb>0 ) {
+  if( fa*fb>0 ) { //points bracket contour
     unsigned maxtries = std::floor( ( getBox()(dir,dir) ) / bw[dir] );
+    std::vector<double> pos2lower = pos2;
+    std::vector<double> pos2upper = pos2;
     for(unsigned i=0; i<maxtries; ++i) {
-      double sign=(pos1[dir]>0)? +1 : -1; // If the nanoparticle is inside the membrane push it out
-      pos2[dir] += sign*bw[dir]; fb = getDifferenceFromContour( pos2, faked );
-      if( fa*fb<0 ) break;
-      // if fa*fb is less than zero the new pos 1 is outside the contour
+
+      pos2lower[dir] -= bw[dir]; double fb_lower = getDifferenceFromContour( pos2lower, faked );
+      pos2upper[dir] += bw[dir]; double fb_upper = getDifferenceFromContour( pos2upper, faked );
+
+      if(fa*fb_lower<0) {
+        pos2 = pos2lower;
+        fb = fb_lower;
+        break;
+      } else if(fa*fb_upper<0) {
+        pos2 = pos2upper;
+        fb = fb_upper;
+        break;
+      }// if fa*fb is less than zero the new pos 1 is outside the contour
     }
-    if (fa*fb>0) { //If for loop fails to find a root
+    if (fa*fb>0) { //For loop failed to find a root
       std::cerr << "Error: cannot find first root" << std::endl;
+      std::cerr << "pos1: " << pos1[dir] << " pos2: " << pos2[dir] << std::endl;
       std::abort();
     }
   }
+  
   // Set direction for contour search
-  dirv[dir] = pos2[dir] - pos1[dir];
-  // Bracket for second root starts in center of membrane
-  double fc = getDifferenceFromContour( pos2, faked );
-  if( fc*fb>0 ) {
-    // first time is true, because fc=fb
-    // push pos2 from its initial position inside the membrane towards the second contourn
+  if (fa > 0 && fb < 0){ //pos1 is inside the contour and pos2 is outside
+    dirv[dir] = pos1[dir] - pos2[dir];
+    pos3 = pos1;
+    pos4 = pos1;
+  }
+  else if (fa < 0 && fb > 0){ //pos1 is outside the contour and pos2 is inside
+    dirv[dir] = pos2[dir] - pos1[dir];
+    pos3 = pos2;
+    pos4 = pos2;
+  }
+  else {
+    std::cerr << "Error: cannot find direction for contour search" << std::endl;
+    std::abort();
+  }
+
+  // fc = density difference between pos4 and the contour
+  double fc = getDifferenceFromContour( pos4, faked );
+  if( fc>0 ) {
+    // first time is true, because pos4 is initially inside the contour
+    // push pos4 from its initial position inside the membrane until outside second contour
     unsigned maxtries = std::floor( ( getBox()(dir,dir) ) / bw[dir] );
     for(unsigned i=0; i<maxtries; ++i) {
       double sign=(dirv[dir]>0)? +1 : -1;
-      pos2[dir] += sign*bw[dir]; fc = getDifferenceFromContour( pos2, faked );
-      if( fc*fb<0 ) break;
+      pos4[dir] += sign*bw[dir]; fc = getDifferenceFromContour( pos4, faked );
+      if( fc<0 ) break;
     }
-    if (fc*fb>0) { //If for loop fails to find a root
+    if (fc>0) { //If for loop fails to find a root
       std::cerr << "Error: cannot find second root" << std::endl;
       std::abort();
     }
-    dirv2[dir] = ( pos1[dir] + dirv[dir] ) - pos2[dir];
+    // dirv2[dir] = ( pos1[dir] + dirv[dir] ) - pos2[dir];
+    dirv2[dir] = pos3[dir] - pos4[dir];
   }
 
   // Now do a search for the two contours
   findContour( dirv, pos1 );
   // Save the first value
   Vector root1; root1.zero(); root1[dir] = pval[dir];
-  findContour( dirv2, pos2 );
+  findContour( dirv2, pos4 );
   // Calculate the separation between the two roots using PBC
   Vector root2; root2.zero(); root2[dir] = pval[dir];
   Vector sep = pbcDistance( root1, root2 ); double spacing = fabs( sep[dir] ); plumed_assert( spacing>epsilon );
   getPntrToComponent("thickness")->set( spacing );
 
-  // Make sure the sign is right
+  // Make sure the sign is right so that dist1 is the closest to the reference atom and dist2 is always positive
   double predir=(root1[dir]*root2[dir]<0)? -1 : 1;
-  // This deals with periodic boundary conditions - if we are inside the membrane the sum of the absolute
-  // distances from the contours should add up to the spacing.  When this is not the case we must be outside
-  // the contour
-  // if( predir==-1 && (fabs(root1[dir])+fabs(root2[dir]))>(spacing+pbc_param) ) predir=1;
-  // Set the final value to root that is closest to the "origin" = position of atom
   if( fabs(root1[dir])<fabs(root2[dir]) ) {
     getPntrToComponent("dist1")->set( predir*fabs(root1[dir]) );
     getPntrToComponent("dist2")->set( fabs(root2[dir]) );
@@ -215,7 +244,7 @@ void DistanceFromContour::evaluateDerivatives( const Vector& root1, const double
   Vector origind; origind.zero(); Tensor vir; vir.zero();
   double sumd = 0; std::vector<double> pp(3), ddd(3,0);
   for(unsigned i=0; i<nactive; ++i) {
-    double newval = evaluateKernel( getPosition(active_list[i]), root1, ddd );
+    // double newval = evaluateKernel( getPosition(active_list[i]), root1, ddd );
     Vector distance = pbcDistance( getPosition(getNumberOfAtoms()-1), getPosition(active_list[i]) );
 
     if( getNumberOfArguments()==1 ) {
